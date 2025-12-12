@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>極簡工廠條碼生成器</title>
+    <!-- 引入 QR Code 函式庫 (若需完全離線，請下載此 js 放在同目錄或使用 Code 128) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #e5e7eb;
+            --card-bg: #ffffff;
+            --primary: #2563eb;
+            --text-main: #1f2937;
+            --border: #d1d5db;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* 靠上對齊，避免長內容被切掉 */
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* 模擬手機/小工具的容器 */
+        .app-container {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 380px; /* 限制寬度，模擬圖片大小 */
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: var(--text-main);
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #4b5563;
+        }
+
+        /* 類型選擇器樣式 */
+        .type-selector {
+            display: flex;
+            background: #f3f4f6;
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .type-option {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .type-option.active {
+            background: white;
+            color: var(--primary);
+            font-weight: bold;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            resize: vertical;
+            font-family: monospace;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+        }
+
+        /* 結果列表 */
+        .result-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            border-top: 1px dashed var(--border);
+            padding-top: 16px;
+        }
+
+        .barcode-item {
+            background: #fafafa;
+            border: 1px solid #eee;
+            padding: 16px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            min-height: 80px;
+            justify-content: center;
+        }
+
+        .barcode-text {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #666;
+            word-break: break-all;
+            text-align: center;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        /* QR Code 圖片容器 */
+        .qrcode-img img {
+            display: block; /* 移除圖片底部留白 */
+        }
+
+        /* 隱藏列印時的背景，只印內容 (雖然使用者說不需要列印按鈕，但保留原生列印功能的乾淨度) */
+        @media print {
+            body { background: white; padding: 0; }
+            .app-container { box-shadow: none; max-width: none; width: 100%; padding: 0; }
+            textarea, .control-group { display: none; }
+            h2 { display: none; }
+            .result-list { border: none; padding: 0; display: block; }
+            .barcode-item { break-inside: avoid; border: none; margin-bottom: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h2>🛠️ 條碼生成器</h2>
+
+        <!-- 條碼類型選擇 -->
+        <div class="control-group">
+            <div class="type-selector">
+                <div class="type-option active" onclick="setType('code128')" id="btn-128">Code 128</div>
+                <div class="type-option" onclick="setType('qrcode')" id="btn-qr">QR Code</div>
+            </div>
+        </div>
+
+        <!-- 輸入區 -->
+        <div class="control-group">
+            <textarea id="inputData" placeholder="請輸入資料 (一行一筆)&#10;支援 Excel 貼上&#10;例如：A123456789"></textarea>
+        </div>
+
+        <!-- 結果顯示區 -->
+        <div id="resultList" class="result-list">
+            <div style="text-align: center; color: #9ca3af; font-size: 0.9rem; padding: 20px;">
+                👇 條碼將顯示於此
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 設定狀態 ---
+        let currentType = 'code128'; // 預設 Code 128
+
+        const inputData = document.getElementById('inputData');
+        const resultList = document.getElementById('resultList');
+        const btn128 = document.getElementById('btn-128');
+        const btnQr = document.getElementById('btn-qr');
+
+        // --- 切換類型 ---
+        function setType(type) {
+            currentType = type;
+            // 更新 UI
+            if(type === 'code128') {
+                btn128.classList.add('active');
+                btnQr.classList.remove('active');
+            } else {
+                btn128.classList.remove('active');
+                btnQr.classList.add('active');
+            }
+            generate();
+        }
+
+        // --- 主生成邏輯 ---
+        function generate() {
+            const text = inputData.value;
+            const lines = text.split('\n').filter(line => line.trim() !== '');
+
+            resultList.innerHTML = ''; // 清空
+
+            if (lines.length === 0) {
+                resultList.innerHTML = '<div style="text-align: center; color: #9ca3af; font-size: 0.9rem; padding: 20px;">👇 條碼將顯示於此</div>';
+                return;
+            }
+
+            lines.forEach(line => {
+                line = line.trim();
+                
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'barcode-item';
+
+                // 根據類型生成
+                if (currentType === 'code128') {
+                    const canvas = document.createElement('canvas');
+                    try {
+                        Code128Generator.draw(canvas, line);
+                        itemDiv.appendChild(canvas);
+                    } catch (e) {
+                        itemDiv.innerHTML = `<span style="color:red; font-size:0.8rem">無法生成 Code 128 (含有無效字元)</span>`;
+                    }
+                } else {
+                    const qrDiv = document.createElement('div');
+                    qrDiv.className = 'qrcode-img';
+                    // 使用 QRCode.js 庫
+                    if (typeof QRCode !== 'undefined') {
+                        new QRCode(qrDiv, {
+                            text: line,
+                            width: 128,
+                            height: 128,
+                            colorDark : "#000000",
+                            colorLight : "#ffffff",
+                            correctLevel : QRCode.CorrectLevel.H
+                        });
+                        itemDiv.appendChild(qrDiv);
+                    } else {
+                        itemDiv.innerHTML = `<span style="color:red; font-size:0.8rem">⚠️ 需聯網載入 QR 庫</span>`;
+                    }
+                }
+
+                // 顯示文字
+                const textDiv = document.createElement('div');
+                textDiv.className = 'barcode-text';
+                textDiv.innerText = line;
+                itemDiv.appendChild(textDiv);
+
+                resultList.appendChild(itemDiv);
+            });
+        }
+
+        // --- Code 128 B 生成引擎 (純 JS，無依賴) ---
+        // 簡化版 Code 128B，適用於大多數英數符號
+        const Code128Generator = {
+            // Code 128 Patterns (部分映射，Widths: bar, space, bar, space, bar, space)
+            patterns: [
+                "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213", // 0-9
+                "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132", // 10-19
+                "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211", // 20-29
+                "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313", // 30-39
+                "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331", // 40-49
+                "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111", // 50-59
+                "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214", // 60-69
+                "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111", // 70-79
+                "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141", // 80-89
+                "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141", // 90-99
+                "114131", "311141", "411131", "211412", "211214", "211232" // 100-105 (Start B=104, Stop=106 uses special logic)
+            ],
+            // Stop pattern is special (2331112)
+            stopPattern: "2331112",
+            
+            draw: function(canvas, text) {
+                // Code 128B implementation
+                // Start Code B value is 104
+                let checkSum = 104;
+                let patternString = this.patterns[104]; // Start B
+
+                for (let i = 0; i < text.length; i++) {
+                    const charCode = text.charCodeAt(i);
+                    let code128Value = charCode - 32; // ASCII 32(' ') -> 0
+                    
+                    if (code128Value < 0 || code128Value > 95) {
+                        // 簡單 fallback: 只支援 ASCII 32-126
+                         // 如果遇到不支援的，暫時用空白代替
+                         code128Value = 0;
+                    }
+                    
+                    patternString += this.patterns[code128Value];
+                    checkSum += code128Value * (i + 1);
+                }
+
+                // Checksum mod 103
+                const checkSumValue = checkSum % 103;
+                patternString += this.patterns[checkSumValue];
+
+                // Stop pattern
+                patternString += this.stopPattern;
+
+                // Drawing settings
+                const moduleWidth = 2; // px
+                const height = 60; // px
+                const quietZone = 20;
+
+                // Calculate width
+                let totalModules = 0;
+                for(let char of patternString) totalModules += parseInt(char);
+                const width = (totalModules * moduleWidth) + (quietZone * 2);
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                // White background
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, width, height);
+                ctx.fillStyle = '#000';
+
+                let x = quietZone;
+                for (let i = 0; i < patternString.length; i++) {
+                    const w = parseInt(patternString[i]) * moduleWidth;
+                    // Even indices are bars, odd are spaces
+                    if (i % 2 === 0) {
+                        ctx.fillRect(x, 0, w, height);
+                    }
+                    x += w;
+                }
+            }
+        };
+
+        // --- 事件監聽 ---
+        inputData.addEventListener('input', generate);
+        
+        // 初始執行一次 (若有預設值)
+        generate();
+
+    </script>
+</body>
+</html>
